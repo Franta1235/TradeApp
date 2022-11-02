@@ -20,9 +20,12 @@ def run(symbol, rp):
     for date in progressBar(list(daterange(start_date, end_date)), prefix=f'{symbol}:', suffix='Complete', length=50):
         prices = candles[(date <= candles['time_from']) & (candles['time_from'] < date + datetime.timedelta(1))]
         if len(prices) == 1440:
-            rp.update(prices)
-            result = rp.trade_theoretical()
-            results.append(result)
+            try:
+                rp.update(prices)
+                result = rp.trade()
+                results.append(result)
+            except:
+                pass
 
     mean = statistics.mean(results)
     var = statistics.variance(results)
@@ -30,7 +33,8 @@ def run(symbol, rp):
     return {'Mean': mean, 'Variance': var, 't-statistic': stats.ttest_1samp(results, 1)[0], 'p-value': stats.ttest_1samp(results, 1)[1], 'N': len(results)}
 
 
-rp = GeneralMerton(mu=0, gamma=1)
+rp = GeneralMerton(mu=-0.00725371, gamma=0.82963071, q=0.38189155)
+# rp = GeneralMerton(mu=0, gamma=1, q=0.8)
 res = run(symbol='ETHBTC', rp=rp)
 print(f"Mean =          {res['Mean']}")
 print(f"Variance =      {res['Variance']}")

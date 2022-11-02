@@ -2,6 +2,5 @@ import pandas as pd
 
 
 class AWindow:
-    data = pd.DataFrame
-
-
+    sigma_real = None
+    log_return = None
