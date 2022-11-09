@@ -64,10 +64,10 @@ def get_replicated_portfolio(symbol) -> pd.DataFrame:
     return data
 
 
-def import_to_replicated_portfolio(symbol, _trading_pair_id, _date, _open, _close, _log_return, _sigma_true, _sigma) -> None:
+def import_to_replicated_portfolio(_symbol, _trading_pair_id, _date, _log_return, _sigma) -> None:
     cnx = mysql.connector.connect(user='root', password='Frantisek1235.', host='127.0.0.1', database='crypto')
     cursor = cnx.cursor()
-    cursor.execute(f"INSERT INTO replicated_portfolio VALUES ('{symbol}',{_trading_pair_id},'{_date}',{_open},{_close},{_log_return},{_sigma_true},{_sigma});")
+    cursor.execute(f"INSERT INTO replicated_portfolio VALUES ('{_symbol}',{_trading_pair_id},'{_date}',{_log_return},{_sigma});")
     cnx.commit()
 
 
@@ -105,7 +105,18 @@ def delete_replicated_portfolio(symbol) -> None:
     cnx.commit()
 
 
+def get_trading_pairs() -> []:
+    cnx = mysql.connector.connect(user='root', password='Frantisek1235.', host='127.0.0.1', database='crypto')
+    cursor = cnx.cursor()
+    cursor.execute("SELECT * FROM trading_pair WHERE base_coin_id=57 ORDER BY day_base_volume DESC")
+    columns = cursor.fetchall()
+
+    pairs = []
+    for pair in columns:
+        pairs.append(pair[8])
+    return pairs
+
+
 def test():
     cnx = mysql.connector.connect(user='root', password='Frantisek1235.', host='127.0.0.1', database='crypto')
     cursor = cnx.cursor()
-

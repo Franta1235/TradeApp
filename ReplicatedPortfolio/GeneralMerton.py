@@ -1,7 +1,12 @@
+from typing import Tuple
+
 import pandas as pd
 import numpy as np
 import math
 import statistics
+import matplotlib.pyplot as plt
+from pandas import DataFrame
+
 from AReplicatedPortfolio import AReplicatedPortfolio
 from ReplicatedPortfolio.Window.GeneralMertonWindow import GeneralMertonWindow
 from Volatility.RealVolatility import RealVolatility
@@ -31,7 +36,8 @@ class GeneralMerton(AReplicatedPortfolio):
         self.uy = data['uY']
         self.uyx = data['uYx']
         log_return = math.log(prices.iloc[len(prices) - 1]['open'] / prices.iloc[0]['open'])
-        window = GeneralMertonWindow(log_return=log_return, sigma_est=self.sigma_est, sigma_real=self.sigma_real, sigma_p=self.sigma_p, sigma_q=self.sigma_q, mu=self.param['mu'], gamma=self.param['gamma'])
+        date = prices.iloc[0]['time_from']
+        window = GeneralMertonWindow(date=date, log_return=log_return, sigma_est=self.sigma_est, sigma_real=self.sigma_real, sigma_p=self.sigma_p, sigma_q=self.sigma_q, mu=self.param['mu'], gamma=self.param['gamma'])
         return window
 
     def update(self, prices) -> None:
@@ -49,7 +55,7 @@ class GeneralMerton(AReplicatedPortfolio):
         except:
             self.sigma_real = RealVolatility().estimate(prices)
             log_return = math.log(prices.iloc[len(prices) - 1]['open'] / prices.iloc[0]['open'])
-            window = GeneralMertonWindow(log_return=log_return, sigma_est=None, sigma_real=self.sigma_real, sigma_p=None, sigma_q=None, mu=None, gamma=None)
+            window = GeneralMertonWindow(date=prices.iloc[0]['time_from'], log_return=log_return, sigma_est=None, sigma_real=self.sigma_real, sigma_p=None, sigma_q=None, mu=None, gamma=None)
             self.windows.append(window)
 
     def uY(self, X) -> pd.DataFrame:
@@ -82,31 +88,78 @@ class GeneralMerton(AReplicatedPortfolio):
         pass
 
     def plot(self) -> None:
-        pass
+        """
+        Plots merton portfolio in time
+        :return: None
+        """
+        data = self.trade()[0]
+
+        f = plt.figure(figsize=(30, 15))
+        axes1 = f.add_subplot(111)
+        plt.plot(data['time'], data['price'])
+        plt.xticks(data['time'][0::int(len(data['time']) / 10)])
+
+        buy = data[data['result'] > 0]
+        sell = data[data['result'] < 0]
+        plt.plot(buy['time'], buy['price'], '^', color='green', markersize=15)
+        plt.plot(sell['time'], sell['price'], 'v', color='red', markersize=15)
+
+        axes2 = axes1.twinx()
+        axes2.set_ylabel(r'Hedging position $\Delta^X$(t)')
+        plt.plot(data['time'], data['price_contract'], 'b')
+
+        plt.show()
+
+        # f.savefig("Data/Mean_Reversion.pdf", bbox_inches='tight')
+        # input("Press Enter to continue...")
 
     def trade_theoretical(self) -> float:
         return self.uy.iloc[len(self.uy) - 1]
 
-    def trade(self) -> float:
+    def trade(self) -> tuple[DataFrame, int]:
         fee = 0.0015
-        wealth = []
         asset1 = self.uy.iloc[0]  # x
         asset2 = 0  # y
         self.X = self.X.reset_index(drop=True)
+        last_position = 0
+        data = []
+        trades_count = 0
         for index, row in self.X.iterrows():
             price = row['price']
-            diff = self.uyx.iloc[index] - asset2
 
-            if diff > 0:
-                asset1 -= diff * price
-                asset2 += diff * (1 - fee)
-            else:
-                asset1 -= diff * price * (1 - fee)
-                asset2 += diff
+            diff = self.uyx.iloc[index] - last_position
+            order = 0
+            if abs(diff) > 4 / self.X.iloc[0]['price']:
+                trades_count += 1
+                order = diff
+                if diff > 0:
+                    asset1 -= diff * price
+                    asset2 += diff * (1 - fee)
+                else:
+                    asset1 -= diff * price * (1 - fee)
+                    asset2 += diff
+
+                last_position = self.uyx.iloc[index]
 
             P = asset1 + asset2 * price
-            wealth.append(P)
-        return wealth[len(wealth) - 1]
+            data.append([row['t'], row['price'], P, self.uyx.iloc[index], order])
+
+        order = asset2
+        price = self.X.iloc[len(self.X) - 1]['price']
+        if order > 0:
+            trades_count += 1
+            asset1 -= order * price
+            asset2 += order * (1 - fee)
+        elif order < 0:
+            trades_count += 1
+            asset1 -= order * price * (1 - fee)
+            asset2 += order
+
+        P = asset1 + asset2 * price
+        data.append([1, price, P, 0, order])
+
+        data = pd.DataFrame(data, columns=['time', 'price', 'price_contract', 'position', 'result'])
+        return data, trades_count
 
     @staticmethod
     def pay_off(mu, gamma, x, sigma_p, sigma_q) -> float:
@@ -119,7 +172,7 @@ class GeneralMerton(AReplicatedPortfolio):
     @staticmethod
     def objective_function(x, data):
         isinstance(data, pd.DataFrame)
-        mu = x[0]
+        mu = 0  # x[0]
         gamma = x[1]
         q = x[2]
 
